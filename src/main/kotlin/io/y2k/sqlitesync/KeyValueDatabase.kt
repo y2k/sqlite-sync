@@ -12,10 +12,10 @@ sealed class Command<out T> {
     class Remove(val key: String) : Command<Nothing>()
 }
 
-class AndroidDatabaseProvider(private val name: String, private val db: SQLiteDatabase) : DatabaseProvider {
+class AndroidDatabaseProvider(name: String, private val db: SQLiteDatabase) : DatabaseProvider {
 
     init {
-        db.execSQL("CREATE TABLE $name (key TEXT, value TEXT, action TEXT)")
+        db.execSQL("CREATE TABLE IF NOT EXISTS $name (key TEXT, value TEXT, action TEXT)")
     }
 
     override suspend fun useTransaction(f: () -> Unit) {
