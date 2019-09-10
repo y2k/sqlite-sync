@@ -51,9 +51,8 @@ class KeyValueDatabase<T : Any>(
     }
 
     suspend fun update(f: (PersistentMap<String, T>) -> List<Command<T>>) {
-        f(store.value).forEach { x ->
-            log.update { it.add(x) }
-        }
+        log.update { it.addAll(f(store.value)) }
+
         reloadStore()
         reloadDatabase()
     }
