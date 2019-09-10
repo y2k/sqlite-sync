@@ -11,23 +11,23 @@ class LibraryTests {
 
     @Test(timeout = 5_000)
     fun test() = runBlocking {
-        val db = TestDatabase()
+        val provider = InMemoryProvider()
 
-        var lib = makeLibrary(db)
+        var db = makeDatabase(provider)
 
-        lib.update { List(3) { Command.Add("1", Item(false, "1s", "1t", 1L)) } }
-        assertEquals(1, lib.snapshot.size)
+        db.update { List(3) { Command.Update("1", Item(false, "1s", "1t", 1L)) } }
+        assertEquals(1, db.snapshot.size)
 
-        lib = makeLibrary(db)
-        assertEquals(1, lib.snapshot.size)
+        db = makeDatabase(provider)
+        assertEquals(1, db.snapshot.size)
 
-        lib.update { listOf(Command.Remove(it.toList().first().first)) }
-        lib = makeLibrary(db)
-        assertEquals(0, lib.snapshot.size)
+        db.update { listOf(Command.Remove(it.toList().first().first)) }
+        db = makeDatabase(provider)
+        assertEquals(0, db.snapshot.size)
     }
 
-    private suspend fun makeLibrary(db: SQLiteDatabase): Library<Item> {
-        return Library.make(
+    private suspend fun makeDatabase(db: DatabaseProvider): KeyValueDatabase<Item> {
+        return KeyValueDatabase.make(
             db, "history",
             { "${it.favorite}|${it.source}|${it.target}|${it.id}" },
             {
@@ -45,7 +45,7 @@ class LibraryTests {
     )
 }
 
-private class TestDatabase : SQLiteDatabase {
+private class InMemoryProvider : DatabaseProvider {
 
     private val conn: Connection
 

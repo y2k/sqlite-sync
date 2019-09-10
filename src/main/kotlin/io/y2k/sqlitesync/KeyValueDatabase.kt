@@ -6,13 +6,12 @@ import kotlinx.collections.immutable.PersistentMap
 import kotlinx.collections.immutable.persistentHashMapOf
 import kotlinx.collections.immutable.persistentListOf
 
-sealed class Command<T> {
-    class Add<T>(val key: String, val value: T) : Command<T>()
-    class Remove<T>(val key: String) : Command<T>()
+sealed class Command<out T> {
     class Update<T>(val key: String, val value: T) : Command<T>()
+    class Remove(val key: String) : Command<Nothing>()
 }
 
-interface SQLiteDatabase {
+interface DatabaseProvider {
     suspend fun useTransaction(f: () -> Unit)
     suspend fun <T : Any> query(sql: String, mapTo: (Row) -> T): List<T>
     fun execSql(sql: String, vararg data: String)
@@ -24,8 +23,8 @@ interface Row {
     fun getLong(column: String): Long
 }
 
-class Library<T : Any>(
-    private val db: SQLiteDatabase,
+class KeyValueDatabase<T : Any>(
+    private val db: DatabaseProvider,
     private val table: String,
     private val serialize: (T) -> String,
     private val deserialize: (String) -> T
@@ -41,7 +40,6 @@ class Library<T : Any>(
             log.update { xs ->
                 xs.add(
                     when (it.action) {
-                        "insert" -> Command.Add(it.key, deserialize(it.value!!))
                         "update" -> Command.Update(it.key, deserialize(it.value!!))
                         "delete" -> Command.Remove(it.key)
                         else -> error("$it")
@@ -60,41 +58,38 @@ class Library<T : Any>(
         reloadDatabase()
     }
 
-    var currentOffset = 0
+    private var currentOffset = 0
 
     private suspend fun reloadDatabase() {
         val snapshot = log.value
         db.useTransaction {
             snapshot.drop(currentOffset).forEach {
                 when (it) {
-                    is Command.Add ->
-                        db.execSql(
-                            "INSERT INTO $table (action, key, value) VALUES('insert', ?, ?)",
-                            it.key, serialize(it.value))
-                    is Command.Remove ->
-                        db.execSql(
-                            "INSERT INTO $table (action, key) VALUES('delete', ?)",
-                            it.key)
                     is Command.Update ->
                         db.execSql(
                             "INSERT INTO $table (action, key, value) VALUES('update', ?, ?)",
-                            it.key, serialize(it.value))
+                            it.key, serialize(it.value)
+                        )
+                    is Command.Remove ->
+                        db.execSql(
+                            "INSERT INTO $table (action, key) VALUES('delete', ?)",
+                            it.key
+                        )
                 }
             }
             currentOffset = snapshot.size
         }
     }
 
-    var currentStoreOffset = 0
+    private var currentStoreOffset = 0
 
     private fun reloadStore() {
         val snapshot = log.value
         store.value = snapshot.drop(currentStoreOffset).asSequence().fold(persistentHashMapOf(),
             { xs, x ->
                 when (x) {
-                    is Command.Add -> xs.put(x.key, x.value)
-                    is Command.Remove -> xs.remove(x.key)
                     is Command.Update -> xs.put(x.key, x.value)
+                    is Command.Remove -> xs.remove(x.key)
                 }
             }
         )
@@ -107,11 +102,7 @@ class Library<T : Any>(
 
     companion object {
         suspend fun <T : Any> make(
-            db: SQLiteDatabase, table: String, serialize: (T) -> String, deserialize: (String) -> T) =
-            run {
-                val l = Library(db, table, serialize, deserialize)
-                l.init()
-                l
-            }
+            db: DatabaseProvider, table: String, serialize: (T) -> String, deserialize: (String) -> T
+        ) = KeyValueDatabase(db, table, serialize, deserialize).apply { init() }
     }
 }
