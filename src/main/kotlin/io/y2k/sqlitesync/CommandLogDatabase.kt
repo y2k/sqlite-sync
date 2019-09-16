@@ -3,17 +3,23 @@ package io.y2k.sqlitesync
 import kotlinx.atomicfu.AtomicRef
 import kotlinx.atomicfu.atomic
 
-class CommandLogDatabase<Store, Command>(
-    initState: Store,
-    vararg fs: (Command, Store) -> Store
+class CommandLogDatabase<S, C>(
+    initState: S,
+    vararg fs: (C, S) -> S
 ) {
 
     private data class State<S, C>(val state: S, val log: List<C> = emptyList())
 
     private val fs = fs.toList()
-    private val state = atomic(State<Store, Command>(initState))
+    private val state = atomic(State<S, C>(initState))
 
-    fun <T> update(f: (Store) -> Pair<List<Command>, T>): T =
+    fun <T> updateLog(f: (List<C>) -> Pair<List<C>, T>): T =
+        state.updateWithResult {
+            val (updatedLog, result) = f(it.log)
+            it.copy(log = updatedLog) to result
+        }
+
+    fun <T> update(f: (S) -> Pair<List<C>, T>): T =
         state.updateWithResult {
             val (newCommands, r) = f(it.state)
             val newStore =

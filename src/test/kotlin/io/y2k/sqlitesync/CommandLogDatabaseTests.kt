@@ -7,6 +7,42 @@ import kotlin.test.assertEquals
 class CommandLogDatabaseTests {
 
     @Test
+    fun `save and restore log test`() {
+        val logs = run {
+            val store = CommandLogDatabase(AppStore(), ::convertToState, ::convertToUser)
+
+            store.update { List(3) { NewSlackRecord("user1", "compose #$it") } to Unit }
+            assertEquals(3, store.updateLog { it to it.size })
+
+            val logs = store.updateLog { it to it }
+            assertEquals(3, store.updateLog { it to it.size })
+            // Save to disk
+            store.updateLog { it.drop(logs.size) to Unit }
+            assertEquals(0, store.updateLog { it to it.size })
+            logs
+        }
+
+        run {
+            val store = CommandLogDatabase(AppStore(), ::convertToState, ::convertToUser)
+            assertEquals(AppStore(), store.read { it })
+        }
+    }
+
+    @Test
+    fun `log test`() {
+        val store = CommandLogDatabase(AppStore(), ::convertToState, ::convertToUser)
+
+        store.update { List(3) { NewSlackRecord("user1", "compose #$it") } to Unit }
+        assertEquals(3, store.updateLog { it to it.size })
+
+        store.update { List(3) { NewSlackRecord("user1", "compose #$it") } to Unit }
+        assertEquals(6, store.updateLog { it to it.size })
+
+        store.updateLog { emptyList<Command>() to Unit }
+        assertEquals(0, store.updateLog { it to it.size })
+    }
+
+    @Test
     fun test() {
         val store = CommandLogDatabase(AppStore(), ::convertToState, ::convertToUser)
 
