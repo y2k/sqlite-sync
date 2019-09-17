@@ -1,29 +1,30 @@
 package io.y2k.sqlitesync
 
+import io.y2k.sqlitesync.CommandLogDatabase.State
 import kotlinx.atomicfu.AtomicRef
 import kotlinx.atomicfu.atomic
 
-class CommandLogDatabase<S, C>(
-    initState: S,
-    vararg fs: (C, S) -> S
+class CommandLogDatabase<State, Command>(
+    initState: State,
+    vararg materializedViewGenerators: (Command, State) -> State
 ) {
 
     private data class State<S, C>(val state: S, val log: List<C> = emptyList())
 
-    private val fs = fs.toList()
-    private val state = atomic(State<S, C>(initState))
+    private val materializedViewGenerators = materializedViewGenerators.toList()
+    private val state = atomic(State<State, Command>(initState))
 
-    fun <T> updateLog(f: (List<C>) -> Pair<List<C>, T>): T =
+    fun <T> rewriteLog(f: (List<Command>) -> Pair<List<Command>, T>): T =
         state.updateWithResult {
             val (updatedLog, result) = f(it.log)
             it.copy(log = updatedLog) to result
         }
 
-    fun <T> update(f: (S) -> Pair<List<C>, T>): T =
+    fun <T> update(f: (State) -> Pair<List<Command>, T>): T =
         state.updateWithResult {
             val (newCommands, r) = f(it.state)
             val newStore =
-                fs.fold(it.state) { acc, function ->
+                materializedViewGenerators.fold(it.state) { acc, function ->
                     newCommands.fold(acc) { acc2, cmd ->
                         function(cmd, acc2)
                     }
@@ -31,11 +32,11 @@ class CommandLogDatabase<S, C>(
             State(newStore, it.log + newCommands) to r
         }
 
-    private inline fun <T, R> AtomicRef<T>.updateWithResult(function: (T) -> Pair<T, R>): R {
+    private inline fun <T, R> AtomicRef<T>.updateWithResult(f: (T) -> Pair<T, R>): R {
         while (true) {
             val cur = value
-            val (upd, r) = function(cur)
-            if (compareAndSet(cur, upd)) return r
+            val (upd, result) = f(cur)
+            if (compareAndSet(cur, upd)) return result
         }
     }
 }

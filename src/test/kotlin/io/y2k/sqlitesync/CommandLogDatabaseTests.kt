@@ -12,13 +12,13 @@ class CommandLogDatabaseTests {
             val store = CommandLogDatabase(AppStore(), ::convertToState, ::convertToUser)
 
             store.update { List(3) { NewSlackRecord("user1", "compose #$it") } to Unit }
-            assertEquals(3, store.updateLog { it to it.size })
+            assertEquals(3, store.rewriteLog { it to it.size })
 
-            val logs = store.updateLog { it to it }
-            assertEquals(3, store.updateLog { it to it.size })
+            val logs = store.rewriteLog { it to it }
+            assertEquals(3, store.rewriteLog { it to it.size })
             // Save to disk
-            store.updateLog { it.drop(logs.size) to Unit }
-            assertEquals(0, store.updateLog { it to it.size })
+            store.rewriteLog { it.drop(logs.size) to Unit }
+            assertEquals(0, store.rewriteLog { it to it.size })
             logs
         }
 
@@ -33,13 +33,13 @@ class CommandLogDatabaseTests {
         val store = CommandLogDatabase(AppStore(), ::convertToState, ::convertToUser)
 
         store.update { List(3) { NewSlackRecord("user1", "compose #$it") } to Unit }
-        assertEquals(3, store.updateLog { it to it.size })
+        assertEquals(3, store.rewriteLog { it to it.size })
 
         store.update { List(3) { NewSlackRecord("user1", "compose #$it") } to Unit }
-        assertEquals(6, store.updateLog { it to it.size })
+        assertEquals(6, store.rewriteLog { it to it.size })
 
-        store.updateLog { emptyList<Command>() to Unit }
-        assertEquals(0, store.updateLog { it to it.size })
+        store.rewriteLog { emptyList<Command>() to Unit }
+        assertEquals(0, store.rewriteLog { it to it.size })
     }
 
     @Test
